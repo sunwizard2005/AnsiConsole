@@ -30,7 +30,7 @@ jobs:
     - name: Remove preconfigured source
       run: dotnet nuget remove source Source
     - name: Add nuget source
-      run: dotnet nuget add source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json -n Source -u ck-jmills -p "${{secrets.CKJMILLSNUGETPAT}}" --store-password-in-clear-text
+      run: dotnet nuget add source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json -n Source -u sunwizard2005 -p "${{secrets.NUGETPAT}}" --store-password-in-clear-text
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
