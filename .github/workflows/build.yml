@@ -1,0 +1,44 @@
+name: .NET
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET 6
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 6.0.x
+        source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+      env:
+        NUGET_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+    - name: Setup .NET 5
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 5.0.x
+        source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+      env:
+        NUGET_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+    - name: Remove preconfigured source
+      run: dotnet nuget remove source Source
+    - name: Add nuget source
+      run: dotnet nuget add source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json -n Source -u ck-jmills -p "${{secrets.CKJMILLSNUGETPAT}}" --store-password-in-clear-text
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore
+    - name: Test
+      run: dotnet test --verbosity normal
+    - name: Pack
+      run: dotnet pack CK.Sentinel.Client/CK.Sentinel.Client.csproj --configuration Release --include-source
+    - name: PushGitHub
+      run: dotnet nuget push **/*.nupkg --source Source --skip-duplicate
+      if: ${{ github.ref == 'refs/heads/master' }}
