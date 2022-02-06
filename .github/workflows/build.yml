@@ -38,7 +38,7 @@ jobs:
     - name: Test
       run: dotnet test --verbosity normal
     - name: Pack
-      run: dotnet pack CK.Sentinel.Client/CK.Sentinel.Client.csproj --configuration Release --include-source
+      run: dotnet pack AnsiConsole/AnsiConsole.csproj --configuration Release
     - name: PushGitHub
       run: dotnet nuget push **/*.nupkg --source Source --skip-duplicate
       if: ${{ github.ref == 'refs/heads/master' }}
