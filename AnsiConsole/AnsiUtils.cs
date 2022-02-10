@@ -250,6 +250,7 @@ namespace AnsiConsole
                     }
                     else
                     {
+                        builder.Append(preCode);
                         builder.Append(str[i..s]);
                     }
                 }
