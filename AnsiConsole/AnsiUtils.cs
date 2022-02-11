@@ -156,7 +156,34 @@ namespace AnsiConsole
             { "bggrey20", "e[48;5;252m" },
             { "bggrey21", "e[48;5;253m" },
             { "bggrey22", "e[48;5;254m" },
-            { "bggrey23", "e[48;5;255m" }
+            { "bggrey23", "e[48;5;255m" },
+
+            // Movement
+            { "clear to end", "e[0J" },
+            { "clear from start", "e[1J" },
+            { "clear", "e[2J" },
+
+            { "clear line to end", "e[0K" },
+            { "clear line from start", "e[1K" },
+            { "clear line", "e[2K" }
+        };
+
+        private static SortedDictionary<string, string> movementCodes = new SortedDictionary<string, string>
+        {
+            { "up", "e[{0}A" },
+            { "down", "e[{0}B" },
+            { "right", "e[{0}C" },
+            { "left", "e[{0}D" },
+            { "forward", "e[{0}C" },
+            { "back", "e[{0}D" },
+            { "line down", "e[{0}E" },
+            { "line up" , "e[{0}F" },
+            { "column", "e[{0}G" },
+            { "pos", "e[{0};{1}H" },
+            { "position", "e[{0};{1}H" },
+            { "scroll up", "e[{0}S" },
+            { "scroll down", "e[{0}T" }
+
         };
 
         // optimization to not retry not-found codes
@@ -171,6 +198,14 @@ namespace AnsiConsole
                 newCodes[kv.Key] = kv.Value.Replace("e", escape).Replace("b", beep);
             }
             codes = newCodes;
+
+            newCodes = new SortedDictionary<string, string>();
+            // fixup shorthand replacements above
+            foreach (KeyValuePair<string, string> kv in movementCodes)
+            {
+                newCodes[kv.Key] = kv.Value.Replace("e", escape).Replace("b", beep);
+            }
+            movementCodes = newCodes;
         }
 
         public static AnsiRender AnsiRender { get; set; } = AnsiRender.Interpret;
@@ -221,7 +256,6 @@ namespace AnsiConsole
 
             do
             {
-
                 int i = str.IndexOf(CodePrefix, s);
                 int j = str.IndexOf(CodePrefix, i + 1);
                 int k = str.IndexOf(CodeSuffix, i + 1);
@@ -236,7 +270,7 @@ namespace AnsiConsole
                 string preCode = string.Empty;
                 string code = string.Empty;
                 // postCode is everything after code, if anything, and processed on next loop
-                if (i >= s && k > i && i != k - 1)
+                if (i >= s && k > i)// && i != k - 1)
                 {
                     if (i > s) preCode = str[s..i];
                     code = str[(i + 1)..k];
@@ -268,28 +302,52 @@ namespace AnsiConsole
         {
             ansiCode = null;
             if (codes.TryGetValue(code, out ansiCode)) return true;
-            if (notFound.Contains(code)) return false;
+            if (notFound.Contains(code) || string.IsNullOrEmpty(code)) return false;
 
             byte r, g, b;
             bool isForegroundColor;
 
             var hicolor = code.Split(":");
-            isForegroundColor = hicolor[0].ToLower() != "bg";
 
-            if (hicolor.Length == 4 && hicolor[0].Length == 2)
+            if (movementCodes.TryGetValue(hicolor[0], out string movement))
             {
-                if (hicolor[1].Length == 1 && hicolor[2].Length == 1 && hicolor[3].Length == 1)
+                string[] @params = new string[] { "", "", "", "", "", "", "" };
+                Array.Copy(hicolor, 1, @params, 0, hicolor.Length - 1);
+
+                ansiCode = string.Format(movement, @params);
+            }
+            else
+            {
+                isForegroundColor = hicolor[0].ToLower() != "bg";
+
+                if (hicolor.Length == 4 && hicolor[0].Length == 2)
                 {
+                    if (hicolor[1].Length == 1 && hicolor[2].Length == 1 && hicolor[3].Length == 1)
+                    {
+                        try
+                        {
+                            // 8-bit
+                            var r8 = byte.Parse(hicolor[1]);
+                            var g8 = byte.Parse(hicolor[2]);
+                            var b8 = byte.Parse(hicolor[3]);
+
+                            ansiCode = $"{escape}[{(isForegroundColor ? 38 : 48)};5;{16 + 36 * r8 + 6 * g8 + b8}m";
+                            codes[code] = ansiCode;
+                            return true;
+                        }
+                        catch
+                        {
+                            notFound.Add(code);
+                            return false;
+                        }
+                    }
+
+                    // 24-bit
                     try
                     {
-                        // 8-bit
-                        var r8 = byte.Parse(hicolor[1]);
-                        var g8 = byte.Parse(hicolor[2]);
-                        var b8 = byte.Parse(hicolor[3]);
-
-                        ansiCode = $"{escape}[{(isForegroundColor ? 38 : 48)};5;{16 + 36 * r8 + 6 * g8 + b8}m";
-                        codes[code] = ansiCode;
-                        return true;
+                        r = Convert.ToByte(hicolor[1], 16);
+                        g = Convert.ToByte(hicolor[2], 16);
+                        b = Convert.ToByte(hicolor[3], 16);
                     }
                     catch
                     {
@@ -297,54 +355,40 @@ namespace AnsiConsole
                         return false;
                     }
                 }
-
-                // 24-bit
-                try
-                {
-                    r = Convert.ToByte(hicolor[1], 16);
-                    g = Convert.ToByte(hicolor[2], 16);
-                    b = Convert.ToByte(hicolor[3], 16);
-                }
-                catch
+                else
+                if (hicolor.Length > 2 || (hicolor.Length > 1 && hicolor[0] != "fg" && hicolor[0] != "bg"))
                 {
                     notFound.Add(code);
                     return false;
                 }
-            }
-            else
-            if (hicolor.Length > 2 || (hicolor.Length > 1 && hicolor[0] != "fg" && hicolor[0] != "bg"))
-            {
-                notFound.Add(code);
-                return false;
-            }
-            else
-            {
-                string colorName = hicolor[^1];
-
-                var type = typeof(Color);
-                var prop = type?.GetProperty(colorName, typeof(Color));
-
-                if (prop == null)
+                else
                 {
-                    notFound.Add(code);
-                    return false;
+                    string colorName = hicolor[^1];
+
+                    var type = typeof(Color);
+                    var prop = type?.GetProperty(colorName, typeof(Color));
+
+                    if (prop == null)
+                    {
+                        notFound.Add(code);
+                        return false;
+                    }
+
+                    Color color = (Color)prop.GetValue(null);
+
+                    if (color.A != 0xFF)
+                    {
+                        notFound.Add(code);
+                        return false;
+                    }
+
+                    r = color.R;
+                    g = color.G;
+                    b = color.B;
                 }
 
-                Color color = (Color)prop.GetValue(null);
-
-                if (color.A != 0xFF)
-                {
-                    notFound.Add(code);
-                    return false;
-                }
-
-                r = color.R;
-                g = color.G;
-                b = color.B;
+                ansiCode = $"{escape}[{(isForegroundColor ? 38 : 48)};2;{r};{g};{b}m";
             }
-
-            ansiCode = $"{escape}[{(isForegroundColor ? 38 : 48)};2;{r};{g};{b}m";
-
             codes[code] = ansiCode;
             return true;
         }
